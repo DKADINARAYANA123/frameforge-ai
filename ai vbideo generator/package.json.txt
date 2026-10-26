@@ -1,0 +1,11 @@
+{
+  "name": "ai-video-generation-studio",
+  "version": "2.0.0",
+  "description": "All-in-one AI Video Studio backend",
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "node-fetch": "^2.7.0"
+  }
+}

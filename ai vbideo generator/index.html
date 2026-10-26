@@ -1,0 +1,213 @@
+ <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Video Generation Studio Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-600/30">
+                    <i class="fa-solid fa-wand-magic-sparkles text-xl"></i>
+                </div>
+                <span class="text-xl font-bold tracking-wide">AI Video Studio <span class="text-indigo-400 text-xs px-2 py-0.5 bg-indigo-950 border border-indigo-800 rounded-full">Pro v2.0</span></span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="historyBtn" class="text-sm bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl transition font-medium flex items-center space-x-2">
+                    <i class="fa-solid fa-history"></i><span>History</span>
+                </button>
+                <div id="userAuthBadge" class="w-9 h-9 bg-indigo-500 rounded-full flex items-center justify-center font-bold text-sm shadow">AI</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Studio Dashboard -->
+    <main class="flex-grow max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
+        
+        <!-- Left Column: Generation Controls (Span 2) -->
+        <section class="lg:col-span-2 space-y-6 bg-slate-900/40 p-6 rounded-2xl border border-slate-800/80 shadow-xl backdrop-blur-sm">
+            <h2 class="text-lg font-semibold flex items-center text-indigo-400">
+                <i class="fa-solid fa-sliders mr-2"></i> Studio Parameters
+            </h2>
+
+            <!-- Text Prompt Input -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-slate-300">Text-to-Video Description</label>
+                <textarea id="promptInput" rows="4" 
+                    class="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-100 focus:outline-none focus:border-indigo-500 transition placeholder:text-slate-600"
+                    placeholder="A cinematic drone shot flying through a neon-lit futuristic cyberpunk city during rain, highly detailed..."></textarea>
+            </div>
+
+            <!-- Configuration Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- AI Voiceover Selection -->
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-slate-300">AI Voiceover Narration</label>
+                    <select id="voiceSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        <option value="none">No Voiceover (Silent)</option>
+                        <option value="alloy">Alloy (Balanced & Friendly)</option>
+                        <option value="echo">Echo (Deep & Authoritative)</option>
+                        <option value="fable">Fable (Expressive Storyteller)</option>
+                    </select>
+                </div>
+
+                <!-- Background Music Selection -->
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-slate-300">Background Sound Track</label>
+                    <select id="musicSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 focus:outline-none focus:border-indigo-500">
+                        <option value="none">No Music</option>
+                        <option value="cinematic">Cinematic Epic Orchestral</option>
+                        <option value="lofi">Lo-Fi Chill Beats</option>
+                        <option value="upbeat">Upbeat Electronic Corporate</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Master Generate Button -->
+            <button id="generateBtn" 
+                class="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold py-4 rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-clapperboard"></i>
+                <span>Render Complete AI Video</span>
+            </button>
+        </section>
+
+        <!-- Right Column: Preview & Export (Span 1) -->
+        <section class="bg-slate-900/40 p-6 rounded-2xl border border-slate-800/80 shadow-xl flex flex-col justify-between backdrop-blur-sm">
+            <div>
+                <h2 class="text-lg font-semibold flex items-center text-indigo-400 mb-4">
+                    <i class="fa-solid fa-play-circle mr-2"></i> Live Preview & Render
+                </h2>
+
+                <!-- Video Preview Container -->
+                <div id="previewContainer" class="w-full aspect-video bg-slate-950 border border-slate-800 rounded-xl flex flex-col items-center justify-center relative overflow-hidden shadow-inner">
+                    <div id="placeholderState" class="text-center p-6 text-slate-500 space-y-2">
+                        <i class="fa-solid fa-film text-4xl mb-2 text-slate-600"></i>
+                        <p class="text-sm">Your rendered MP4 will appear here</p>
+                    </div>
+                    
+                    <!-- Loading Spinner & Real-Time Status -->
+                    <div id="loadingState" class="hidden absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center space-y-3 p-4">
+                        <div class="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                        <p id="loadingText" class="text-xs text-indigo-300 font-medium tracking-wide text-center">Initializing Cloud Render...</p>
+                    </div>
+
+                    <!-- Video Player Element -->
+                    <video id="videoPlayer" controls class="w-full h-full object-cover hidden rounded-xl"></video>
+                </div>
+            </div>
+
+            <!-- Export Action -->
+            <div class="mt-6 space-y-3">
+                <a id="downloadBtn" href="#" download="ai-masterpiece.mp4" 
+                   class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium py-3 rounded-xl transition flex items-center justify-center space-x-2 pointer-events-none opacity-50 shadow">
+                    <i class="fa-solid fa-download"></i>
+                <span> Download Final MP4 </span>
+                </a>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-900 py-6 text-center text-xs text-slate-600">
+        AI Video Generation Studio &copy; <span id="copyrightYear"></span>. Powered by Netlify Serverless, Hugging Face, OpenAI TTS & FFmpeg.
+    </footer>
+
+    <!-- Frontend Application Logic -->
+    <script>
+        const generateBtn = document.getElementById('generateBtn');
+        const promptInput = document.getElementById('promptInput');
+        const voiceSelect = document.getElementById('voiceSelect');
+        const musicSelect = document.getElementById('musicSelect');
+        const placeholderState = document.getElementById('placeholderState');
+        const loadingState = document.getElementById('loadingState');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const loadingText = document.getElementById('loadingText');
+
+        generateBtn.addEventListener('click', async () => {
+            const prompt = promptInput.value.trim();
+            if (!prompt) {
+                alert('Please enter a description for your video prompt!');
+                return;
+            }
+
+            placeholderState.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+            videoPlayer.classList.add('hidden');
+            generateBtn.disabled = true;
+            generateBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            downloadBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500', 'text-white', 'shadow-lg');
+            downloadBtn.classList.add('pointer-events-none', 'opacity-50');
+            downloadBtn.href = '#';
+
+            try {
+                loadingText.innerText = "Step 1/3: Generating Video Stream (Stable Video Diffusion)...";
+                await new Promise(resolve => setTimeout(resolve, 1200));
+                loadingText.innerText = "Step 2/3: Synthesizing AI Voiceover & Background Track...";
+
+                const response = await fetch('/.netlify/functions/generate-video.js', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        voice: voiceSelect.value,
+                        music: musicSelect.value
+                    })
+                });
+
+                const contentType = (response.headers.get('content-type') || '').toLowerCase();
+                const rawText = await response.text();
+                let data = {};
+
+                if (rawText) {
+                    try {
+                        if (contentType.includes('application/json') || rawText.trim().startsWith('{') || rawText.trim().startsWith('[')) {
+                            data = JSON.parse(rawText);
+                        } else if (rawText.trim().startsWith('http')) {
+                            data = { videoUrl: rawText.trim() };
+                        } else {
+                            throw new Error(`Server returned a non-JSON response: ${rawText.slice(0, 120)}`);
+                        }
+                    } catch (parseError) {
+                        throw new Error(parseError.message || `Server returned a non-JSON response: ${rawText.slice(0, 120)}`);
+                    }
+                }
+
+                loadingText.innerText = "Step 3/3: Merging streams via Cloud FFmpeg...";
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                if (data.videoUrl && typeof data.videoUrl === 'string' && data.videoUrl.trim() !== '') {
+                    videoPlayer.src = data.videoUrl;
+                    videoPlayer.load();
+                    videoPlayer.classList.remove('hidden');
+                    loadingState.classList.add('hidden');
+
+                    downloadBtn.href = data.videoUrl;
+                    downloadBtn.classList.remove('pointer-events-none', 'opacity-50');
+                    downloadBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500', 'text-white', 'shadow-lg');
+                } else {
+                    throw new Error('No valid video URL returned from server.');
+                }
+            } catch (error) {
+                console.error('Rendering error:', error);
+                loadingState.classList.add('hidden');
+                placeholderState.classList.remove('hidden');
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        });
+    </script>
+    <script>
+        // Dynamically set the copyright year
+        document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+    </script>
+</body>
+</html>

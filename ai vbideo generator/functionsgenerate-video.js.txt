@@ -1,0 +1,142 @@
+// functions/generate-video.js
+const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+const { createClient } = require('@supabase/supabase-js');
+
+// Set FFmpeg binary path for serverless environment
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+
+// Initialize Supabase Client
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+exports.handler = async (event, context) => {
+    if (event.httpMethod !== 'POST') {
+        return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+    }
+
+    let tmpFiles = [];
+
+    try {
+        // Safe JSON Payload Parsing
+        let requestBody;
+        try {
+            requestBody = event.body ? JSON.parse(event.body) : {};
+        } catch (err) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON payload format.' }) };
+        }
+
+        const { prompt, voice, music } = requestBody;
+        if (!prompt) {
+            return { statusCode: 400, body: JSON.stringify({ error: 'Prompt is required.' }) };
+        }
+
+        const tmpDir = os.tmpdir();
+        const videoPath = path.join(tmpDir, `video_${Date.now()}.mp4`);
+        const audioPath = path.join(tmpDir, `audio_${Date.now()}.mp3`);
+        const outputPath = path.join(tmpDir, `output_${Date.now()}.mp4`);
+        tmpFiles.push(videoPath, audioPath, outputPath);
+
+        // 1. Call Text-to-Video Model API (Hugging Face Stable Video Diffusion)
+        const hfResponse = await fetch("https://api-inference.huggingface.co/models/stabilityai/stable-video-diffusion-img2vid", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ inputs: prompt })
+        });
+
+        if (!hfResponse.ok) {
+            const errText = await hfResponse.text();
+            throw new Error(`Hugging Face Video API failed: ${errText}`);
+        }
+
+        const videoBuffer = await hfResponse.buffer();
+        fs.writeFileSync(videoPath, videoBuffer);
+
+        // 2. Handle Voiceover (OpenAI TTS API if voice selected)
+        let hasVoice = false;
+        if (voice && voice !== 'none') {
+            const ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: "tts-1",
+                    input: `Scene description: ${prompt}`,
+                    voice: voice
+                })
+            });
+
+            if (ttsResponse.ok) {
+                const audioBuffer = await ttsResponse.buffer();
+                fs.writeFileSync(audioPath, audioBuffer);
+                hasVoice = true;
+            }
+        }
+
+        // 3. Cloud Rendering & Media Merging via FFmpeg
+        await new Promise((resolve, reject) => {
+            let command = ffmpeg(videoPath);
+
+            if (hasVoice) {
+                command.input(audioPath)
+                       .outputOptions('-c:v copy')
+                       .outputOptions('-c:a aac')
+                       .outputOptions('-shortest');
+            } else {
+                command.outputOptions('-c:v copy');
+            }
+
+            command.save(outputPath)
+                   .on('end', () => resolve())
+                   .on('error', (err) => reject(err));
+        });
+
+        // Read final merged video and convert to base64 data stream
+        const finalBuffer = fs.readFileSync(outputPath);
+        const base64Video = finalBuffer.toString('base64');
+        const dataUrl = `data:video/mp4;base64,${base64Video}`;
+
+        // 4. Save project record to Supabase History Database
+        await supabase.from('projects').insert([
+            { prompt, voice_option: voice, music_option: music, status: 'completed' }
+        ]);
+
+        // Cleanup temporary files
+        tmpFiles.forEach(file => {
+            if (fs.existsSync(file)) fs.unlinkSync(file);
+        });
+
+        return {
+            statusCode: 200,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                success: true,
+                message: "Video rendered and merged successfully",
+                videoUrl: dataUrl
+            })
+        };
+
+    } catch (error) {
+        // Cleanup on failure
+        tmpFiles.forEach(file => {
+            if (fs && fs.existsSync && fs.existsSync(file)) fs.unlinkSync(file);
+        });
+
+        console.error("Pipeline Execution Error:", error);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ error: error.message || 'Internal Server Render Error' })
+        };
+    }
+};

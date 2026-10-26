@@ -1,0 +1,98 @@
+import os
+import time
+import requests
+
+# Set up your API credentials
+API_BASE_URL = os.getenv("AI_VIDEO_API_URL", "https://api.example-video-provider.com/v1")
+API_KEY = os.getenv("AI_VIDEO_API_KEY", "your_api_key_here")
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json",
+}
+
+def create_video_task(prompt: str, duration: int = 6, resolution: str = "1080p") -> str:
+    """Submits a text-to-video generation job and returns the task ID."""
+    endpoint = f"{API_BASE_URL}/videos/generations"
+    
+    payload = {
+        "prompt": prompt,
+        "duration": duration,       # Typical lengths range from 4 to 10 seconds
+        "resolution": resolution,   # E.g., "720p", "1080p", "4k"
+        "aspect_ratio": "16:9",
+        "fps": 24
+    }
+    
+    print(f"Sending prompt to video model: '{prompt}'")
+    response = requests.post(endpoint, json=payload, headers=headers)
+    
+    if response.status_code not in [200, 201]:
+        raise RuntimeError(f"Error starting video generation ({response.status_code}): {response.text}")
+        
+    data = response.json()
+    task_id = data.get("task_id") or data.get("id")
+    print(f"Generation task successfully queued. Task ID: {task_id}")
+    return task_id
+
+def poll_and_download_video(task_id: str, output_filename: str = "output.mp4", poll_interval: int = 8):
+    """Polls the task status until completion and downloads the resulting MP4 video."""
+    status_endpoint = f"{API_BASE_URL}/videos/tasks/{task_id}"
+    
+    print("Waiting for video rendering to complete (this may take up to a minute)...")
+    
+    while True:
+    response = requests.post(endpoint, json=payload, headers=headers)
+
+# Print out what the server actually said for debugging
+print(f"HTTP Status Code: {response.status_code}")
+print(f"Raw Response Text: {response.text[:500]}") # Print first 500 chars
+
+# Safely check if it's actually JSON before parsing
+try:
+    data = response.json()
+except requests.exceptions.JSONDecodeError:
+    raise RuntimeError(f"Server returned non-JSON response! Content: {response.text}")
+        response = requests.popst(endpoint,json=paylode, headers=headers)
+        if response.status_code != 200:
+            print(f"Warning: Failed to fetch status check ({response.status_code}), retrying...")
+            time.sleep(poll_interval)
+            continue
+            
+        status_data = response.json()
+        state = status_data.get("status") # Expected: 'queued', 'processing', 'completed', 'failed'
+        
+        print(f" > Current status: {state}")
+        
+        if state == "completed":
+            video_url = status_data.get("video_url") or status_data.get("url")
+            print(f"Video ready! Downloading from: {video_url}")
+            
+            # Stream download the binary video file
+            video_res = requests.get(video_url, stream=True)
+            if video_res.status_code == 200:
+                with open(output_filename, "wb") as f:
+                    for chunk in video_res.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                print(f"Success! Video saved locally as '{output_filename}'")
+                return output_filename
+            else:
+                raise RuntimeError(f"Failed to download video file. Status code: {video_res.status_code}")
+                
+        elif state == "failed":
+            error_msg = status_data.get("error", "Unknown server-side error")
+            raise RuntimeError(f"Video generation failed: {error_msg}")
+            
+        time.sleep(poll_interval)
+
+if __name__ == "__main__":
+    # Example execution flow
+    prompt_text = (
+        "Cinematic drone shot soaring through a glowing canyon of neon glass towers, "
+        "futuristic sci-fi city at twilight, 8k resolution, smooth camera movement."
+    )
+    
+    try:
+        task_id = create_video_task(prompt=prompt_text, duration=6, resolution="1080p")
+        poll_and_download_video(task_id, output_filename="cyberpunk_city.mp4")
+    except Exception as e:
+        print(f"An error occurred: {e}")
